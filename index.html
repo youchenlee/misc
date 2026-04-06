@@ -94,15 +94,11 @@
     let isDragging = false;
     let startY = 0;
     let startScrollY = 0;
-    let velocity = 0;
-    let lastY = 0;
-    let lastTime = 0;
-    let rafId = null;
 
-    // 互動區域紀錄（用來偵測點擊）
+    // 互動區域紀錄（存 content-space 座標）
     let clickAreas = [];
 
-    // --- 初始化與事件監聽 ---
+    // --- 初始化 ---
     function init() {
       resize();
       window.addEventListener('resize', resize);
@@ -164,22 +160,22 @@
       }
     }
 
-    // 將文字切成不超過 maxWidth 的行陣列
+    // 將文字根據最大寬度切成多行陣列
     function splitTextIntoLines(ctx, text, maxWidth) {
       const chars = text.split('');
       const lines = [];
-      let line = '';
+      let currentLine = '';
 
       for (let i = 0; i < chars.length; i++) {
-        const testLine = line + chars[i];
-        if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
-          lines.push(line);
-          line = chars[i];
+        const testLine = currentLine + chars[i];
+        if (ctx.measureText(testLine).width > maxWidth && i > 0) {
+          lines.push(currentLine);
+          currentLine = chars[i];
         } else {
-          line = testLine;
+          currentLine = testLine;
         }
       }
-      if (line) lines.push(line);
+      if (currentLine) lines.push(currentLine);
       return lines;
     }
 
@@ -225,9 +221,10 @@
         currentY = renderCard(item, currentY);
       });
 
-      // 更新最大滾動範圍，並 clamp 當前捲動位置
+      // 更新最大滾動範圍
       maxScroll = Math.max(0, currentY + PADDING - CANVAS_HEIGHT);
-      scrollY = Math.max(0, Math.min(maxScroll, scrollY));
+      if (scrollY > maxScroll) scrollY = maxScroll;
+      if (scrollY < 0) scrollY = 0;
 
       ctx.restore();
 
@@ -246,7 +243,7 @@
         ? item.content
         : `第 ${item.id} 題：${item.content}`;
 
-      // --- 預先計算高度（two-pass layout）---
+      // --- 兩段式高度計算（dry-run）---
       ctx.font = FONT_NORMAL;
       const contentLines = splitTextIntoLines(ctx, displayContent, contentMaxWidth);
       const contentHeight = contentLines.length * 26;
@@ -254,27 +251,25 @@
       let cardHeight = innerPadding + contentHeight + innerPadding;
 
       if (isExpanded) {
-        cardHeight += 15; // 分隔線上間距
-
-        // 答案高度
+        cardHeight += 15; // 分隔線
+        // 答案
         ctx.font = FONT_BOLD;
-        const ansLines = splitTextIntoLines(ctx, `答案：${item.answers}`, contentMaxWidth);
-        cardHeight += 15 + ansLines.length * 26 + 10;
+        const ansLines = splitTextIntoLines(ctx, `參考解答：${item.answers}`, contentMaxWidth);
+        cardHeight += ansLines.length * 26 + 10;
 
-        // 補充說明高度
+        // 補充說明
         if (item.exps && item.exps.length > 0) {
-          cardHeight += 15; // 說明區塊間距
+          let expBgHeight = 40; // header
           ctx.font = FONT_SMALL;
           item.exps.forEach(exp => {
-            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 24);
-            cardHeight += lines.length * 22;
+            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 36);
+            expBgHeight += lines.length * 22;
           });
-          cardHeight += 15;
+          cardHeight += 15 + expBgHeight;
         }
       }
 
-      // --- 繪製卡片背景 ---
-      // 陰影
+      // --- 繪製卡片 ---
       ctx.shadowColor = 'rgba(0,0,0,0.06)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
@@ -285,17 +280,17 @@
 
       // 左側裝飾線
       ctx.fillStyle = COLOR_PRIMARY;
+      ctx.fillRect(cardX, startY + RADIUS, 6, cardHeight - RADIUS * 2);
       ctx.beginPath();
-      ctx.moveTo(cardX + RADIUS, startY);
-      ctx.lineTo(cardX + 6, startY + RADIUS);
-      ctx.lineTo(cardX + 6, startY + cardHeight - RADIUS);
-      ctx.lineTo(cardX + RADIUS, startY + cardHeight);
-      ctx.closePath();
+      ctx.arc(cardX + RADIUS, startY + RADIUS, RADIUS, Math.PI, 1.5 * Math.PI);
+      ctx.arc(cardX + RADIUS, startY + cardHeight - RADIUS, RADIUS, 0.5 * Math.PI, Math.PI);
+      ctx.fillStyle = COLOR_CARD_BG;
       ctx.fill();
-      // 左側直線主體
+      // 重新畫左側直線（蓋住圓角空隙）
+      ctx.fillStyle = COLOR_PRIMARY;
       ctx.fillRect(cardX, startY + RADIUS, 6, cardHeight - RADIUS * 2);
 
-      // --- 繪製卡片內容 ---
+      // --- 繪製內容 ---
       const drawX = cardX + innerPadding + 10;
       let drawY = startY + innerPadding;
 
@@ -322,9 +317,9 @@
       ctx.textBaseline = 'middle';
       ctx.fillText(isExpanded ? '收起解答' : '看解答', btnX + btnWidth / 2, btnY + btnHeight / 2);
 
-      // 記錄點擊區域
+      // 記錄可點擊區域（存 content-space 座標）
       clickAreas.push({
-        x: btnX, y: btnY + scrollY,
+        x: btnX, y: btnY,
         width: btnWidth, height: btnHeight,
         action: () => {
           expandedState.set(`${item.type}-${item.id}`, !isExpanded);
@@ -347,33 +342,47 @@
         ctx.setLineDash([]);
         drawY += 15;
 
-        // 答案
-        ctx.font = FONT_BOLD;
+        // 答案文字
         ctx.fillStyle = COLOR_ANSWER;
+        ctx.font = FONT_BOLD;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        const ansLines = splitTextIntoLines(ctx, `答案：${item.answers}`, contentMaxWidth);
+        const ansLines = splitTextIntoLines(ctx, `參考解答：${item.answers}`, contentMaxWidth);
         ansLines.forEach(line => {
           ctx.fillText(line, drawX, drawY);
           drawY += 26;
         });
 
-        // 補充說明
+        // 補充說明區塊
         if (item.exps && item.exps.length > 0) {
-          drawY += 15;
+          drawY += 10;
+
+          // 計算說明區塊背景高度
+          let expBgHeight = 40; // header 高度
           ctx.font = FONT_SMALL;
-
           item.exps.forEach(exp => {
-            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 24);
-            const blockHeight = lines.length * 22 + 12;
+            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 36);
+            expBgHeight += lines.length * 22;
+          });
 
-            drawRoundRect(ctx, drawX, drawY, contentMaxWidth, blockHeight, 6, COLOR_HINT_BG);
-            ctx.fillStyle = COLOR_HINT_TEXT;
-            ctx.textBaseline = 'top';
-            lines.forEach((line, i) => {
-              ctx.fillText(line, drawX + 12, drawY + 6 + i * 22);
+          drawRoundRect(ctx, drawX, drawY, contentMaxWidth, expBgHeight, 8, COLOR_HINT_BG);
+
+          let expDrawY = drawY + 12;
+          ctx.fillStyle = COLOR_HINT_TEXT;
+          ctx.font = FONT_BOLD;
+          ctx.textBaseline = 'top';
+          ctx.textAlign = 'left';
+          ctx.fillText('💡 給小朋友的解釋/參考：', drawX + 12, expDrawY);
+          expDrawY += 26;
+
+          ctx.fillStyle = COLOR_TEXT;
+          ctx.font = FONT_SMALL;
+          item.exps.forEach(exp => {
+            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 36);
+            lines.forEach(line => {
+              ctx.fillText(line, drawX + 24, expDrawY);
+              expDrawY += 22;
             });
-            drawY += blockHeight + 6;
           });
         }
       }
@@ -389,77 +398,84 @@
       drawRoundRect(ctx, CANVAS_WIDTH - 8, barY, 5, barH, 3, 'rgba(0,0,0,0.18)');
     }
 
-    // --- 事件處理 ---
-    function getEventY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
-    function getEventX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
+    // --- 互動事件處理 ---
+
+    // 取得相對於 canvas 的座標（處理 CSS scale）
+    function getPointerPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      let clientX = e.clientX;
+      let clientY = e.clientY;
+
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
 
     function handleStart(e) {
-      e.preventDefault();
+      if (e.type === 'touchstart') e.preventDefault();
       isDragging = true;
-      startY = getEventY(e);
+      const pos = getPointerPos(e);
+      startY = pos.y;
       startScrollY = scrollY;
-      velocity = 0;
-      lastY = startY;
-      lastTime = Date.now();
-      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
     function handleMove(e) {
-      e.preventDefault();
       if (!isDragging) return;
-      const currentY = getEventY(e);
-      const now = Date.now();
-      const dt = now - lastTime;
-      if (dt > 0) velocity = (lastY - currentY) / dt * 16;
-      lastY = currentY;
-      lastTime = now;
-      scrollY = Math.max(0, Math.min(maxScroll, startScrollY + (startY - currentY)));
-      render();
+      if (e.type === 'touchmove') e.preventDefault();
+
+      const pos = getPointerPos(e);
+      const dy = pos.y - startY;
+      scrollY = startScrollY - dy;
+
+      // 邊界阻尼（rubber-band 效果）
+      if (scrollY < 0) {
+        scrollY = scrollY * 0.5;
+      } else if (scrollY > maxScroll) {
+        scrollY = maxScroll + (scrollY - maxScroll) * 0.5;
+      }
+
+      requestAnimationFrame(render);
     }
 
     function handleEnd(e) {
       if (!isDragging) return;
       isDragging = false;
 
-      const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
-      const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+      // Snap back to bounds
+      if (scrollY < 0) scrollY = 0;
+      if (scrollY > maxScroll) scrollY = maxScroll;
 
-      if (Math.abs(endY - startY) < 8) {
-        handleClick(endX, endY);
-      } else if (Math.abs(velocity) > 0.5) {
-        inertia();
+      // 判斷是否為點擊（移動距離 < 5px）
+      const pos = getPointerPos(e.changedTouches ? e.changedTouches[0] : e);
+      if (Math.abs(pos.y - startY) < 5) {
+        const clickX = pos.x;
+        const clickY = pos.y + scrollY; // screen → content space
+
+        for (const area of clickAreas) {
+          if (clickX >= area.x && clickX <= area.x + area.width &&
+              clickY >= area.y && clickY <= area.y + area.height) {
+            area.action();
+            break;
+          }
+        }
       }
-    }
 
-    function inertia() {
-      velocity *= 0.94;
-      if (Math.abs(velocity) < 0.3) { velocity = 0; return; }
-      scrollY = Math.max(0, Math.min(maxScroll, scrollY + velocity));
-      render();
-      rafId = requestAnimationFrame(inertia);
+      requestAnimationFrame(render);
     }
 
     function handleWheel(e) {
       e.preventDefault();
       scrollY = Math.max(0, Math.min(maxScroll, scrollY + e.deltaY));
-      render();
-    }
-
-    function handleClick(clientX, clientY) {
-      const scale = Math.min(window.innerWidth / CANVAS_WIDTH, 1);
-      const rect = canvas.getBoundingClientRect();
-      const x = (clientX - rect.left) / scale;
-      const y = (clientY - rect.top) / scale;
-
-      // clickAreas 裡的 y 已含 scrollY，直接用視窗座標比對
-      for (const area of clickAreas) {
-        const areaScreenY = area.y - scrollY;
-        if (x >= area.x && x <= area.x + area.width
-          && y >= areaScreenY && y <= areaScreenY + area.height) {
-          area.action();
-          break;
-        }
-      }
+      requestAnimationFrame(render);
     }
 
     // --- 啟動 ---
