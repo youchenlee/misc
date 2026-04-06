@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>三年級國語挑戰擂台 (Canvas 版)</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       padding: 0;
@@ -20,6 +21,7 @@
       background-color: #FFFFFF;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       cursor: pointer;
+      transform-origin: top center;
     }
   </style>
 </head>
@@ -65,7 +67,7 @@
 
     // --- 視覺常數 ---
     const PADDING = 20;
-    const CARD_MARGIN = 20;
+    const CARD_MARGIN = 16;
     const RADIUS = 12;
     const FONT_TITLE = 'bold 28px "微軟正黑體", "PingFang TC", sans-serif';
     const FONT_H2 = 'bold 22px "微軟正黑體", "PingFang TC", sans-serif';
@@ -124,23 +126,21 @@
 
       canvas.width = CANVAS_WIDTH;
       canvas.height = CANVAS_HEIGHT;
+      canvas.style.width = CANVAS_WIDTH + 'px';
+      canvas.style.height = CANVAS_HEIGHT + 'px';
 
       if (window.innerWidth < CANVAS_WIDTH) {
         canvas.style.transform = `scale(${scale})`;
-        canvas.style.transformOrigin = 'top left';
-        canvas.style.width = CANVAS_WIDTH + 'px';
-        canvas.style.height = CANVAS_HEIGHT + 'px';
+        canvas.style.transformOrigin = 'top center';
       } else {
         canvas.style.transform = 'none';
-        canvas.style.width = CANVAS_WIDTH + 'px';
-        canvas.style.height = CANVAS_HEIGHT + 'px';
       }
 
       render();
     }
 
     // --- 繪圖輔助函數 ---
-    function drawRoundRect(x, y, width, height, radius, fillStyle, strokeStyle, lineWidth) {
+    function drawRoundRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle, lineWidth) {
       ctx.beginPath();
       ctx.moveTo(x + radius, y);
       ctx.lineTo(x + width - radius, y);
@@ -164,43 +164,23 @@
       }
     }
 
-    // 回傳換行後佔用的總高度（不含起始 y）
-    function measureTextWrap(text, maxWidth, lineHeight) {
-      ctx.save();
+    // 將文字切成不超過 maxWidth 的行陣列
+    function splitTextIntoLines(ctx, text, maxWidth) {
       const chars = text.split('');
+      const lines = [];
       let line = '';
-      let lines = 0;
+
       for (let i = 0; i < chars.length; i++) {
         const testLine = line + chars[i];
         if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
-          lines++;
+          lines.push(line);
           line = chars[i];
         } else {
           line = testLine;
         }
       }
-      if (line) lines++;
-      ctx.restore();
-      return lines * lineHeight;
-    }
-
-    function drawTextWrap(text, x, y, maxWidth, lineHeight) {
-      const chars = text.split('');
-      let line = '';
-      let currentY = y;
-
-      for (let i = 0; i < chars.length; i++) {
-        const testLine = line + chars[i];
-        if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
-          ctx.fillText(line, x, currentY);
-          line = chars[i];
-          currentY += lineHeight;
-        } else {
-          line = testLine;
-        }
-      }
-      if (line) ctx.fillText(line, x, currentY);
-      return currentY + lineHeight;
+      if (line) lines.push(line);
+      return lines;
     }
 
     // --- 主渲染邏輯 ---
@@ -226,26 +206,28 @@
       ctx.font = FONT_H2;
       ctx.fillStyle = COLOR_TEXT;
       ctx.fillText('第一關：改錯字與詞語學習', CANVAS_WIDTH / 2, currentY);
-      currentY += 50;
+      currentY += 40;
 
       typoData.forEach(item => {
-        currentY = drawCard(item, currentY);
+        currentY = renderCard(item, currentY);
       });
 
+      currentY += 40;
+
       // 第二關
-      currentY += 10;
       ctx.font = FONT_H2;
       ctx.fillStyle = COLOR_TEXT;
       ctx.textAlign = 'center';
       ctx.fillText('第二關：造句練習', CANVAS_WIDTH / 2, currentY);
-      currentY += 50;
+      currentY += 40;
 
       sentenceData.forEach(item => {
-        currentY = drawCard(item, currentY);
+        currentY = renderCard(item, currentY);
       });
 
-      currentY += PADDING;
-      maxScroll = Math.max(0, currentY - CANVAS_HEIGHT);
+      // 更新最大滾動範圍，並 clamp 當前捲動位置
+      maxScroll = Math.max(0, currentY + PADDING - CANVAS_HEIGHT);
+      scrollY = Math.max(0, Math.min(maxScroll, scrollY));
 
       ctx.restore();
 
@@ -253,115 +235,150 @@
       drawScrollbar();
     }
 
-    function drawCard(item, startY) {
-      const key = `${item.type}-${item.id}`;
-      const isExpanded = expandedState.get(key);
+    function renderCard(item, startY) {
+      const cardWidth = CANVAS_WIDTH - PADDING * 2;
       const cardX = PADDING;
-      const cardW = CANVAS_WIDTH - PADDING * 2;
-      const innerW = cardW - PADDING * 2;
-      const lineHeight = 26;
+      const innerPadding = 20;
+      const contentMaxWidth = cardWidth - innerPadding * 2 - 16; // -16 for left accent line
 
-      // 預先計算高度
+      const isExpanded = expandedState.get(`${item.type}-${item.id}`);
+      const displayContent = item.type === '造句'
+        ? item.content
+        : `第 ${item.id} 題：${item.content}`;
+
+      // --- 預先計算高度（two-pass layout）---
       ctx.font = FONT_NORMAL;
-      const contentH = measureTextWrap(item.content, innerW, lineHeight);
-      let cardH = PADDING + 28 + 8 + contentH + 8 + 36 + PADDING; // tag + gap + content + gap + btn + pad
+      const contentLines = splitTextIntoLines(ctx, displayContent, contentMaxWidth);
+      const contentHeight = contentLines.length * 26;
+
+      let cardHeight = innerPadding + contentHeight + innerPadding;
 
       if (isExpanded) {
-        ctx.font = FONT_BOLD;
-        const ansH = measureTextWrap('答案：' + item.answers, innerW - 20, lineHeight);
-        cardH += 12 + PADDING + ansH + PADDING / 2;
+        cardHeight += 15; // 分隔線上間距
 
+        // 答案高度
+        ctx.font = FONT_BOLD;
+        const ansLines = splitTextIntoLines(ctx, `答案：${item.answers}`, contentMaxWidth);
+        cardHeight += 15 + ansLines.length * 26 + 10;
+
+        // 補充說明高度
         if (item.exps && item.exps.length > 0) {
+          cardHeight += 15; // 說明區塊間距
           ctx.font = FONT_SMALL;
           item.exps.forEach(exp => {
-            cardH += 8 + measureTextWrap(exp, innerW - 20, 24) + 12;
+            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 24);
+            cardHeight += lines.length * 22;
           });
+          cardHeight += 15;
         }
       }
 
-      // 卡片
+      // --- 繪製卡片背景 ---
+      // 陰影
       ctx.shadowColor = 'rgba(0,0,0,0.06)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
-      drawRoundRect(cardX, startY, cardW, cardH, RADIUS, COLOR_CARD_BG, '#E2E8F0', 1);
+      drawRoundRect(ctx, cardX, startY, cardWidth, cardHeight, RADIUS, COLOR_CARD_BG);
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
 
-      let curY = startY + PADDING;
+      // 左側裝飾線
+      ctx.fillStyle = COLOR_PRIMARY;
+      ctx.beginPath();
+      ctx.moveTo(cardX + RADIUS, startY);
+      ctx.lineTo(cardX + 6, startY + RADIUS);
+      ctx.lineTo(cardX + 6, startY + cardHeight - RADIUS);
+      ctx.lineTo(cardX + RADIUS, startY + cardHeight);
+      ctx.closePath();
+      ctx.fill();
+      // 左側直線主體
+      ctx.fillRect(cardX, startY + RADIUS, 6, cardHeight - RADIUS * 2);
 
-      // 類型標籤
-      const isTypo = item.type === '改錯字';
-      const tagBg = isTypo ? '#FFF5F5' : '#F0FFF4';
-      const tagColor = isTypo ? '#E53E3E' : '#38A169';
-      ctx.font = 'bold 13px "微軟正黑體", "PingFang TC", sans-serif';
-      const tagLabel = `${item.type}  #${item.id}`;
-      const tagW = ctx.measureText(tagLabel).width + 20;
+      // --- 繪製卡片內容 ---
+      const drawX = cardX + innerPadding + 10;
+      let drawY = startY + innerPadding;
+
       ctx.textAlign = 'left';
-      drawRoundRect(cardX + PADDING, curY, tagW, 24, 12, tagBg);
-      ctx.fillStyle = tagColor;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(tagLabel, cardX + PADDING + 10, curY + 12);
-      curY += 32;
-
-      // 內容
-      ctx.font = FONT_NORMAL;
-      ctx.fillStyle = COLOR_TEXT;
       ctx.textBaseline = 'top';
-      curY = drawTextWrap(item.content, cardX + PADDING, curY, innerW, lineHeight);
-      curY += 8;
+      ctx.fillStyle = COLOR_TEXT;
+      ctx.font = FONT_NORMAL;
 
-      // 展開按鈕
-      const btnText = isExpanded ? '收合答案' : '查看答案';
+      contentLines.forEach(line => {
+        ctx.fillText(line, drawX, drawY);
+        drawY += 26;
+      });
+
+      // 按鈕（右上角）
+      const btnWidth = 100;
+      const btnHeight = 36;
+      const btnX = cardX + cardWidth - innerPadding - btnWidth;
+      const btnY = startY + innerPadding - 5;
+
+      drawRoundRect(ctx, btnX, btnY, btnWidth, btnHeight, 18, isExpanded ? '#718096' : COLOR_PRIMARY);
+      ctx.fillStyle = '#FFF';
       ctx.font = FONT_SMALL;
-      const btnW = ctx.measureText(btnText).width + 32;
-      const btnH = 32;
-      const btnX = cardX + PADDING;
-      const btnColor = isExpanded ? '#718096' : COLOR_PRIMARY;
-      drawRoundRect(btnX, curY, btnW, btnH, 16, btnColor);
-      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(btnText, btnX + 16, curY + btnH / 2);
+      ctx.fillText(isExpanded ? '收起解答' : '看解答', btnX + btnWidth / 2, btnY + btnHeight / 2);
 
-      // 記錄可點擊區域
+      // 記錄點擊區域
       clickAreas.push({
-        x: btnX, y: curY, w: btnW, h: btnH,
+        x: btnX, y: btnY + scrollY,
+        width: btnWidth, height: btnHeight,
         action: () => {
-          expandedState.set(key, !isExpanded);
-          render();
+          expandedState.set(`${item.type}-${item.id}`, !isExpanded);
+          requestAnimationFrame(render);
         }
       });
 
-      curY += btnH + PADDING;
-
-      // 展開內容
+      // --- 展開解答 ---
       if (isExpanded) {
+        drawY += 10;
+
+        // 分隔線
+        ctx.strokeStyle = '#EEEEEE';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(cardX + cardWidth - innerPadding, drawY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        drawY += 15;
+
         // 答案
         ctx.font = FONT_BOLD;
-        ctx.textBaseline = 'top';
-        const ansText = '答案：' + item.answers;
-        const ansH = measureTextWrap(ansText, innerW - 20, lineHeight);
-        drawRoundRect(cardX + PADDING, curY, innerW, PADDING / 2 + ansH + PADDING / 2, 8, '#FFF0F0');
         ctx.fillStyle = COLOR_ANSWER;
-        drawTextWrap(ansText, cardX + PADDING + 10, curY + PADDING / 2, innerW - 20, lineHeight);
-        curY += PADDING / 2 + ansH + PADDING / 2;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const ansLines = splitTextIntoLines(ctx, `答案：${item.answers}`, contentMaxWidth);
+        ansLines.forEach(line => {
+          ctx.fillText(line, drawX, drawY);
+          drawY += 26;
+        });
 
         // 補充說明
         if (item.exps && item.exps.length > 0) {
+          drawY += 15;
+          ctx.font = FONT_SMALL;
+
           item.exps.forEach(exp => {
-            curY += 8;
-            ctx.font = FONT_SMALL;
-            const expH = measureTextWrap(exp, innerW - 20, 24);
-            drawRoundRect(cardX + PADDING, curY, innerW, expH + 12, 6, COLOR_HINT_BG);
+            const lines = splitTextIntoLines(ctx, `• ${exp}`, contentMaxWidth - 24);
+            const blockHeight = lines.length * 22 + 12;
+
+            drawRoundRect(ctx, drawX, drawY, contentMaxWidth, blockHeight, 6, COLOR_HINT_BG);
             ctx.fillStyle = COLOR_HINT_TEXT;
             ctx.textBaseline = 'top';
-            drawTextWrap(exp, cardX + PADDING + 10, curY + 6, innerW - 20, 24);
-            curY += expH + 12;
+            lines.forEach((line, i) => {
+              ctx.fillText(line, drawX + 12, drawY + 6 + i * 22);
+            });
+            drawY += blockHeight + 6;
           });
         }
       }
 
-      return startY + cardH + CARD_MARGIN;
+      return startY + cardHeight + CARD_MARGIN;
     }
 
     function drawScrollbar() {
@@ -369,22 +386,17 @@
       const totalH = maxScroll + CANVAS_HEIGHT;
       const barH = Math.max(40, (CANVAS_HEIGHT / totalH) * CANVAS_HEIGHT);
       const barY = (scrollY / maxScroll) * (CANVAS_HEIGHT - barH);
-      drawRoundRect(CANVAS_WIDTH - 8, barY, 5, barH, 3, 'rgba(0,0,0,0.2)');
+      drawRoundRect(ctx, CANVAS_WIDTH - 8, barY, 5, barH, 3, 'rgba(0,0,0,0.18)');
     }
 
     // --- 事件處理 ---
-    function getY(e) {
-      return e.touches ? e.touches[0].clientY : e.clientY;
-    }
-
-    function getX(e) {
-      return e.touches ? e.touches[0].clientX : e.clientX;
-    }
+    function getEventY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
+    function getEventX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
 
     function handleStart(e) {
       e.preventDefault();
       isDragging = true;
-      startY = getY(e);
+      startY = getEventY(e);
       startScrollY = scrollY;
       velocity = 0;
       lastY = startY;
@@ -395,13 +407,12 @@
     function handleMove(e) {
       e.preventDefault();
       if (!isDragging) return;
-      const currentY = getY(e);
+      const currentY = getEventY(e);
       const now = Date.now();
       const dt = now - lastTime;
       if (dt > 0) velocity = (lastY - currentY) / dt * 16;
       lastY = currentY;
       lastTime = now;
-
       scrollY = Math.max(0, Math.min(maxScroll, startScrollY + (startY - currentY)));
       render();
     }
@@ -413,7 +424,6 @@
       const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
       const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
 
-      // 判斷是否為點擊（位移 < 8px）
       if (Math.abs(endY - startY) < 8) {
         handleClick(endX, endY);
       } else if (Math.abs(velocity) > 0.5) {
@@ -439,10 +449,13 @@
       const scale = Math.min(window.innerWidth / CANVAS_WIDTH, 1);
       const rect = canvas.getBoundingClientRect();
       const x = (clientX - rect.left) / scale;
-      const y = (clientY - rect.top) / scale + scrollY;
+      const y = (clientY - rect.top) / scale;
 
+      // clickAreas 裡的 y 已含 scrollY，直接用視窗座標比對
       for (const area of clickAreas) {
-        if (x >= area.x && x <= area.x + area.w && y >= area.y && y <= area.y + area.h) {
+        const areaScreenY = area.y - scrollY;
+        if (x >= area.x && x <= area.x + area.width
+          && y >= areaScreenY && y <= areaScreenY + area.height) {
           area.action();
           break;
         }
