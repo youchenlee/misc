@@ -474,7 +474,11 @@
 
     function handleWheel(e) {
       e.preventDefault();
-      scrollY = Math.max(0, Math.min(maxScroll, scrollY + e.deltaY));
+      scrollY += e.deltaY;
+
+      if (scrollY < 0) scrollY = 0;
+      if (scrollY > maxScroll) scrollY = maxScroll;
+
       requestAnimationFrame(render);
     }
 
