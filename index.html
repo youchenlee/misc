@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三年級國語挑戰擂台 (Canvas 版)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #F5F7FA;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      background-color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    // --- 資料層 ---
+    const typoData = [
+      { id: 1, type: "改錯字", content: "這個小孩一直在賣場裡東奔西跑，大人只好大吼大叫。他尖著嘴巴做鬼臉，大人避之唯恐不及。", answers: "大、吼、尖、嘴、恐", exps: ["尖嘴猴腮：形容人長得瘦瘦的，下巴尖尖的，很像調皮的猴子。", "避之唯恐不及：表示非常害怕或討厭某個人事物，想趕快逃開。"] },
+      { id: 2, type: "改錯字", content: "這部電影深獲各界的推崇，連鐵石心腸的人都會羨慕佩服，紛紛參加首映會。", answers: "崇、鐵、羨、慕、參", exps: ["推崇：非常佩服、讚賞某個人或某部作品。"] },
+      { id: 3, type: "改錯字", content: "每到炎炎熱的夏天，小玉會穿上涼鞋，自然而然地享受暑假。", answers: "炎、玉、然、暑", exps: [] },
+      { id: 4, type: "改錯字", content: "我和弟弟在公園裡發現了一棵不同種類的樹，它的樹紋很特別，我忍不住去摸、去揉。", answers: "類、紋、摸、揉", exps: [] },
+      { id: 5, type: "改錯字", content: "出發淨灘前，奶奶叮嚀我們要穿上薄外套、抹好防曬，還帶了糖果和瓜籽當點心。", answers: "薄、曬、糖、籽", exps: [] },
+      { id: 6, type: "改錯字", content: "古老傳說中，人死後會到陰曹地府，作惡多端的人應該受到懲罰。", answers: "曹、府、應", exps: ["陰曹地府：傳說中人死後會去的世界。", "作惡多端：做了非常多壞事。"] },
+      { id: 7, type: "改錯字", content: "叔叔用他的智慧，開闊了一片新天地，還做出了好吃的乳酪，令人驚訝。", answers: "智、慧、闊、酪、驚", exps: [] },
+      { id: 8, type: "改錯字", content: "丞相住在大府邸裡，院子裡開闢了花園，種了楊柳，過著安逸的生活。", answers: "丞、府、闢、楊、逸", exps: ["丞相：古代皇帝身邊最大的官。", "告老還鄉：做官的人年紀大了，辭職回到自己的故鄉休息。", "安逸：安心、舒舒服服的過日子。"] },
+      { id: 9, type: "改錯字", content: "狀元一考上，就睜大眼睛看，厲害的功夫其實很普通。", answers: "狀、睜、厲、普、通", exps: ["慕名而來：因為聽說這家店很有名，所以特地跑來吃。"] },
+      { id: 10, type: "改錯字", content: "大人偏心的時候，小孩會閉上眼睛，胡亂花錢、偷吃零食。", answers: "偏、閉、胡、錢、偷", exps: [] },
+      { id: 11, type: "改錯字", content: "仔細觀察之後，發現這並非尋常之事，於是閉上眼睛、睜大耳朵仔細聽。", answers: "察、尋、閉、睜", exps: [] },
+      { id: 12, type: "改錯字", content: "參加比賽需要千變萬化的技巧，選手們弄好道具後，鞠了一個躬才上場。", answers: "參、千、弄、鞠、躬", exps: ["千變萬化：形容變化非常非常多。"] },
+      { id: 13, type: "改錯字", content: "新推出的造型蛋糕，裡面有彈簧般的口感，完好無損地送到客人手上。", answers: "推、造、簧、損", exps: [] },
+      { id: 14, type: "改錯字", content: "咦？這隻三線鼠好巨大，牠的毛色很吸引人注意。", answers: "咦、鼠、巨、牠、引", exps: [] },
+      { id: 15, type: "改錯字", content: "嘴巴嘟起來的樣子恐怕會讓人混淆。", answers: "嘴、恐、淆", exps: [] },
+      { id: 16, type: "改錯字", content: "他為了撐場面，到處搗亂，把環境弄得一團糟。", answers: "撐、搗、亂、環", exps: ["心懷不軌：心裡藏著壞主意，想要做壞事。"] }
+    ];
+
+    const sentenceData = [
+      { id: 1, type: "造句", content: "（形容詞＋名詞）＋（動詞）＋（名詞）", answers: "（長長的鼻子）噴出（水柱）", exps: ["備用參考：（圓圓的眼睛）流下（眼淚）"] },
+      { id: 2, type: "造句", content: "把（名詞）全部（動詞短語）", answers: "把（實力）全部（展現出來）", exps: ["備用參考：把（飯菜）全部（吃得精光）"] },
+      { id: 3, type: "造句", content: "（地方）＋（動詞）＋（形容詞的＋名詞）", answers: "（夜空）掛著（明亮的星星）", exps: ["備用參考：（花園）開滿（美麗的鮮花）"] },
+      { id: 4, type: "造句", content: "如果……也能……", answers: "如果明天天氣放晴，我們也能去公園野餐了。", exps: [] },
+      { id: 5, type: "造句", content: "從此……", answers: "經過這次教訓，他從此再也不敢遲到了。", exps: [] },
+      { id: 6, type: "造句", content: "無論……都……", answers: "無論遇到多大的困難，他都不會輕易放棄。", exps: [] },
+      { id: 7, type: "造句", content: "一……便……", answers: "鐘聲一響起，同學們便飛奔出教室。", exps: [] },
+      { id: 8, type: "造句", content: "另外……", answers: "這次旅行我們參觀了博物館，另外還品嚐了當地特色美食。", exps: [] },
+      { id: 9, type: "造句", content: "……於是……", answers: "突然下起大雨，於是我們趕緊跑進騎樓躲雨。", exps: [] }
+    ];
+
+    const allData = [...typoData, ...sentenceData];
+    const expandedState = new Map();
+    allData.forEach(item => expandedState.set(`${item.type}-${item.id}`, false));
+
+    // --- 畫布設定與狀態 ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let CANVAS_WIDTH = 800;
+    let CANVAS_HEIGHT = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+
+    // 滾動狀態
+    let scrollY = 0;
+    let maxScroll = 0;
+    let isDragging = false;
+    let startY = 0;
+    let startScrollY = 0;
+    let velocity = 0;
+    let lastTouchY = 0;
+    let lastTouchTime = 0;
+    let animationId = null;
+
+    // 卡片佈局快取
+    let cardLayouts = [];
+
+    // --- 顏色與排版 ---
+    const COLORS = {
+      bg: '#F5F7FA',
+      card: '#FFFFFF',
+      cardBorder: '#E2E8F0',
+      title: '#1A202C',
+      subtitle: '#4A5568',
+      content: '#2D3748',
+      answer: '#2B6CB0',
+      answerBg: '#EBF8FF',
+      exp: '#744210',
+      expBg: '#FEFCBF',
+      typoTag: '#E53E3E',
+      typoBg: '#FFF5F5',
+      sentenceTag: '#38A169',
+      sentenceBg: '#F0FFF4',
+      button: '#4299E1',
+      buttonText: '#FFFFFF',
+      scrollbar: '#CBD5E0',
+      scrollbarActive: '#A0AEC0',
+      headerBg: '#4299E1',
+      headerText: '#FFFFFF',
+    };
+
+    const PADDING = 20;
+    const CARD_GAP = 16;
+    const CARD_RADIUS = 12;
+    const HEADER_HEIGHT = 80;
+
+    // --- 工具函數 ---
+    function resizeCanvas() {
+      const isMobile = window.innerWidth < 850;
+      CANVAS_WIDTH = isMobile ? window.innerWidth : 800;
+      CANVAS_HEIGHT = window.innerHeight;
+      canvas.width = CANVAS_WIDTH * dpr;
+      canvas.height = CANVAS_HEIGHT * dpr;
+      canvas.style.width = CANVAS_WIDTH + 'px';
+      canvas.style.height = CANVAS_HEIGHT + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      calculateLayouts();
+      render();
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function wrapText(text, maxWidth, fontSize) {
+      ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      const lines = [];
+      let line = '';
+      for (let i = 0; i < text.length; i++) {
+        const testLine = line + text[i];
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && line.length > 0) {
+          lines.push(line);
+          line = text[i];
+        } else {
+          line = testLine;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    }
+
+    // --- 佈局計算 ---
+    function calculateLayouts() {
+      cardLayouts = [];
+      let y = HEADER_HEIGHT + PADDING;
+      const cardWidth = CANVAS_WIDTH - PADDING * 2;
+      const contentWidth = cardWidth - PADDING * 2;
+
+      // 改錯字標題
+      cardLayouts.push({ type: 'section-title', text: '改錯字', y: y, height: 40 });
+      y += 50;
+
+      typoData.forEach(item => {
+        y = layoutCard(item, y, cardWidth, contentWidth);
+      });
+
+      // 造句標題
+      y += 10;
+      cardLayouts.push({ type: 'section-title', text: '造句', y: y, height: 40 });
+      y += 50;
+
+      sentenceData.forEach(item => {
+        y = layoutCard(item, y, cardWidth, contentWidth);
+      });
+
+      y += PADDING;
+      maxScroll = Math.max(0, y - CANVAS_HEIGHT);
+    }
+
+    function layoutCard(item, y, cardWidth, contentWidth) {
+      const key = `${item.type}-${item.id}`;
+      const isExpanded = expandedState.get(key);
+      const fontSize = 16;
+      const lineHeight = fontSize * 1.6;
+
+      // 內容行
+      const contentLines = wrapText(item.content, contentWidth - 10, fontSize);
+      let cardHeight = PADDING + contentLines.length * lineHeight + PADDING;
+
+      // 按鈕區
+      cardHeight += 36;
+
+      if (isExpanded) {
+        // 答案區
+        const answerLines = wrapText(`答案：${item.answers}`, contentWidth - 20, fontSize);
+        cardHeight += 10 + PADDING + answerLines.length * lineHeight + PADDING;
+
+        // 補充說明
+        if (item.exps && item.exps.length > 0) {
+          cardHeight += 10;
+          item.exps.forEach(exp => {
+            const expLines = wrapText(exp, contentWidth - 20, 14);
+            cardHeight += expLines.length * (14 * 1.6) + 8;
+          });
+          cardHeight += PADDING;
+        }
+      }
+
+      cardLayouts.push({
+        type: 'card',
+        item: item,
+        key: key,
+        x: PADDING,
+        y: y,
+        width: cardWidth,
+        height: cardHeight,
+        contentLines: contentLines,
+        isExpanded: isExpanded,
+        buttonY: y + PADDING + contentLines.length * lineHeight + 8,
+      });
+
+      return y + cardHeight + CARD_GAP;
+    }
+
+    // --- 渲染 ---
+    function render() {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillStyle = COLORS.bg;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      ctx.save();
+      ctx.translate(0, -scrollY);
+
+      // 繪製卡片
+      cardLayouts.forEach(layout => {
+        if (layout.type === 'section-title') {
+          drawSectionTitle(layout);
+        } else if (layout.type === 'card') {
+          // 只繪製可見範圍內的卡片
+          if (layout.y + layout.height > scrollY - 50 && layout.y < scrollY + CANVAS_HEIGHT + 50) {
+            drawCard(layout);
+          }
+        }
+      });
+
+      ctx.restore();
+
+      // 固定 Header
+      drawHeader();
+
+      // 捲軸
+      drawScrollbar();
+    }
+
+    function drawHeader() {
+      // Header 背景
+      ctx.fillStyle = COLORS.headerBg;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, HEADER_HEIGHT);
+
+      // 標題
+      ctx.fillStyle = COLORS.headerText;
+      ctx.font = `bold 28px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('三年級國語挑戰擂台', CANVAS_WIDTH / 2, HEADER_HEIGHT / 2 - 5);
+
+      // 副標題
+      ctx.font = `14px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText(`共 ${allData.length} 題 | 點擊查看答案`, CANVAS_WIDTH / 2, HEADER_HEIGHT / 2 + 22);
+      ctx.textAlign = 'left';
+    }
+
+    function drawSectionTitle(layout) {
+      ctx.font = `bold 22px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      ctx.fillStyle = COLORS.title;
+      ctx.textBaseline = 'top';
+      ctx.fillText(layout.text, PADDING + 4, layout.y + 8);
+
+      // 底線裝飾
+      ctx.fillStyle = COLORS.button;
+      ctx.fillRect(PADDING + 4, layout.y + 38, 40, 3);
+    }
+
+    function drawCard(layout) {
+      const { item, x, y, width, height, contentLines, isExpanded, buttonY } = layout;
+      const contentWidth = width - PADDING * 2;
+      const fontSize = 16;
+      const lineHeight = fontSize * 1.6;
+
+      // 卡片陰影
+      ctx.shadowColor = 'rgba(0,0,0,0.08)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+
+      // 卡片背景
+      roundRect(x, y, width, height, CARD_RADIUS);
+      ctx.fillStyle = COLORS.card;
+      ctx.fill();
+
+      // 重置陰影
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      // 卡片邊框
+      roundRect(x, y, width, height, CARD_RADIUS);
+      ctx.strokeStyle = COLORS.cardBorder;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 題號標籤
+      const isTypo = item.type === '改錯字';
+      const tagColor = isTypo ? COLORS.typoTag : COLORS.sentenceTag;
+      const tagBg = isTypo ? COLORS.typoBg : COLORS.sentenceBg;
+      const tagText = `${item.type} #${item.id}`;
+
+      ctx.font = `bold 12px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      const tagWidth = ctx.measureText(tagText).width + 16;
+      roundRect(x + PADDING, y + PADDING, tagWidth, 24, 12);
+      ctx.fillStyle = tagBg;
+      ctx.fill();
+      ctx.fillStyle = tagColor;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tagText, x + PADDING + 8, y + PADDING + 12);
+
+      // 內容文字
+      ctx.font = `${fontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      ctx.fillStyle = COLORS.content;
+      ctx.textBaseline = 'top';
+      const textStartY = y + PADDING + 32;
+      contentLines.forEach((line, i) => {
+        ctx.fillText(line, x + PADDING, textStartY + i * lineHeight);
+      });
+
+      // 展開/收合按鈕
+      const btnText = isExpanded ? '收合答案' : '查看答案';
+      ctx.font = `bold 14px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+      const btnWidth = ctx.measureText(btnText).width + 32;
+      const btnX = x + PADDING;
+      const btnH = 30;
+
+      roundRect(btnX, buttonY, btnWidth, btnH, 15);
+      ctx.fillStyle = isExpanded ? COLORS.subtitle : COLORS.button;
+      ctx.fill();
+      ctx.fillStyle = COLORS.buttonText;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(btnText, btnX + 16, buttonY + btnH / 2);
+
+      // 展開內容
+      if (isExpanded) {
+        let curY = buttonY + btnH + 16;
+
+        // 答案區塊
+        const answerLines = wrapText(`答案：${item.answers}`, contentWidth - 20, fontSize);
+        const answerHeight = PADDING + answerLines.length * lineHeight + PADDING / 2;
+        roundRect(x + PADDING, curY, contentWidth, answerHeight, 8);
+        ctx.fillStyle = COLORS.answerBg;
+        ctx.fill();
+
+        ctx.font = `bold ${fontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+        ctx.fillStyle = COLORS.answer;
+        ctx.textBaseline = 'top';
+        answerLines.forEach((line, i) => {
+          ctx.fillText(line, x + PADDING + 10, curY + PADDING / 2 + i * lineHeight);
+        });
+
+        curY += answerHeight;
+
+        // 補充說明
+        if (item.exps && item.exps.length > 0) {
+          curY += 10;
+          item.exps.forEach(exp => {
+            const expLines = wrapText(exp, contentWidth - 20, 14);
+            roundRect(x + PADDING, curY, contentWidth, expLines.length * (14 * 1.6) + 12, 6);
+            ctx.fillStyle = COLORS.expBg;
+            ctx.fill();
+
+            ctx.font = `14px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+            ctx.fillStyle = COLORS.exp;
+            ctx.textBaseline = 'top';
+            expLines.forEach((line, i) => {
+              ctx.fillText(line, x + PADDING + 10, curY + 6 + i * (14 * 1.6));
+            });
+            curY += expLines.length * (14 * 1.6) + 16;
+          });
+        }
+      }
+    }
+
+    function drawScrollbar() {
+      if (maxScroll <= 0) return;
+      const barHeight = Math.max(40, (CANVAS_HEIGHT / (maxScroll + CANVAS_HEIGHT)) * CANVAS_HEIGHT);
+      const barY = HEADER_HEIGHT + (scrollY / maxScroll) * (CANVAS_HEIGHT - HEADER_HEIGHT - barHeight);
+
+      ctx.fillStyle = COLORS.scrollbar;
+      roundRect(CANVAS_WIDTH - 8, barY, 6, barHeight, 3);
+      ctx.fill();
+    }
+
+    // --- 事件處理 ---
+    function getEventY(e) {
+      if (e.touches) return e.touches[0].clientY;
+      return e.clientY;
+    }
+
+    function handleStart(e) {
+      isDragging = true;
+      startY = getEventY(e);
+      startScrollY = scrollY;
+      velocity = 0;
+      lastTouchY = startY;
+      lastTouchTime = Date.now();
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+    }
+
+    function handleMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      const currentY = getEventY(e);
+      const dy = startY - currentY;
+      scrollY = Math.max(0, Math.min(maxScroll, startScrollY + dy));
+
+      // 計算速度
+      const now = Date.now();
+      const dt = now - lastTouchTime;
+      if (dt > 0) {
+        velocity = (lastTouchY - currentY) / dt * 16;
+      }
+      lastTouchY = currentY;
+      lastTouchTime = now;
+
+      render();
+    }
+
+    function handleEnd(e) {
+      if (!isDragging) return;
+      isDragging = false;
+
+      // 判斷是否為點擊（非拖曳）
+      const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+      const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+      const totalMove = Math.abs(endY - (startScrollY === scrollY ? startY : -1));
+
+      if (Math.abs(endY - startY) < 10) {
+        handleClick(endX, endY);
+      }
+
+      // 慣性滾動
+      if (Math.abs(velocity) > 0.5) {
+        inertiaScroll();
+      }
+    }
+
+    function inertiaScroll() {
+      velocity *= 0.95;
+      if (Math.abs(velocity) < 0.5) {
+        velocity = 0;
+        return;
+      }
+      scrollY = Math.max(0, Math.min(maxScroll, scrollY + velocity));
+      render();
+      animationId = requestAnimationFrame(inertiaScroll);
+    }
+
+    function handleClick(clientX, clientY) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const x = (clientX - canvasRect.left);
+      const y = (clientY - canvasRect.top) + scrollY;
+
+      cardLayouts.forEach(layout => {
+        if (layout.type !== 'card') return;
+        const { item, buttonY, key } = layout;
+
+        // 檢查是否點在按鈕上
+        ctx.font = `bold 14px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+        const isExp = expandedState.get(key);
+        const btnText = isExp ? '收合答案' : '查看答案';
+        const btnWidth = ctx.measureText(btnText).width + 32;
+        const btnX = PADDING;
+        const btnH = 30;
+
+        if (x >= btnX && x <= btnX + btnWidth && y >= buttonY && y <= buttonY + btnH) {
+          expandedState.set(key, !isExp);
+          calculateLayouts();
+          // 確保滾動不超過新的 maxScroll
+          scrollY = Math.max(0, Math.min(maxScroll, scrollY));
+          render();
+        }
+      });
+    }
+
+    function handleWheel(e) {
+      e.preventDefault();
+      scrollY = Math.max(0, Math.min(maxScroll, scrollY + e.deltaY));
+      render();
+    }
+
+    // --- 綁定事件 ---
+    canvas.addEventListener('mousedown', handleStart);
+    canvas.addEventListener('mousemove', handleMove);
+    canvas.addEventListener('mouseup', handleEnd);
+    canvas.addEventListener('mouseleave', (e) => { if (isDragging) handleEnd(e); });
+
+    canvas.addEventListener('touchstart', handleStart, { passive: true });
+    canvas.addEventListener('touchmove', handleMove, { passive: false });
+    canvas.addEventListener('touchend', handleEnd);
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- 初始化 ---
+    resizeCanvas();
+  </script>
+</body>
+</html>
